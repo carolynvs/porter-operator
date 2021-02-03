@@ -11,6 +11,7 @@ namePrefix: porter-operator-
 # Labels to add to all resources and selectors.
 #commonLabels:
 #  someName: someValue
+# Labels are applied using the LabelTransformer to avoid having it applied to selectors too
 
 bases:
 - ../crd
@@ -23,6 +24,9 @@ bases:
 #- ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
+
+transformers:
+  - labels.yaml
 
 patchesStrategicMerge:
 # Protect the /metrics endpoint by putting it behind auth.

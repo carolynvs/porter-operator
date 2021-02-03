@@ -55,8 +55,9 @@ var _ = Describe("Installation controller", func() {
 
 			job := jobs.Items[0]
 			Expect(job.Labels).Should(gstruct.MatchKeys(gstruct.IgnoreMissing, gstruct.Keys{
-				"porter":       Equal("true"),
-				"installation": Equal(InstallationName),
+				"porter-data":     Equal("true"),
+				"porter-operator": Equal("true"),
+				"installation":    Equal(InstallationName),
 			}))
 			Expect(job.Spec.Template.Spec.Containers).Should(HaveLen(1))
 

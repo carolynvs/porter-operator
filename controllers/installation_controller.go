@@ -104,9 +104,10 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 			Name:      jobName,
 			Namespace: inst.Namespace,
 			Labels: map[string]string{
-				"porter":       "true",
-				"installation": inst.Name,
-				"job":          jobName,
+				"porter-data":     "true",
+				"porter-operator": "true",
+				"installation":    inst.Name,
+				"job":             jobName,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -157,8 +158,9 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 			Name:      jobName,
 			Namespace: inst.Namespace,
 			Labels: map[string]string{
-				"porter":       "true",
-				"installation": inst.Name,
+				"porter-data":     "true",
+				"porter-operator": "true",
+				"installation":    inst.Name,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -169,8 +171,9 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 					GenerateName: jobName,
 					Namespace:    inst.Namespace,
 					Labels: map[string]string{
-						"porter":       "true",
-						"installation": inst.Name,
+						"porter-data":     "true",
+						"porter-operator": "true",
+						"installation":    inst.Name,
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
