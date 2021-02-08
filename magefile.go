@@ -478,12 +478,7 @@ func CreateKindCluster() error {
 		return errors.Wrap(err, "could not apply hack/local-registry.yaml")
 	}
 
-	err = setClusterNamespace(operatorNamespace)
-	if err != nil {
-		return err
-	}
-
-	return makefile("install").RunV()
+	return setClusterNamespace(operatorNamespace)
 }
 
 // Delete the KIND cluster named porter.
