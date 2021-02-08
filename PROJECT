@@ -4,7 +4,12 @@ projectName: porter-operator
 repo: get.porter.sh/operator
 resources:
 - crdVersion: v1
+  group: ops
   kind: Installation
+  version: v1
+- crdVersion: v1
+  group: ops
+  kind: AgentConfig
   version: v1
 version: 3-alpha
 plugins:

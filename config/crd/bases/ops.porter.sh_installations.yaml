@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: installations.porter.sh
+  name: installations.ops.porter.sh
 spec:
-  group: porter.sh
+  group: ops.porter.sh
   names:
     kind: Installation
     listKind: InstallationList

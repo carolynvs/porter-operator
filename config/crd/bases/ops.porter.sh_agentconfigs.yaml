@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: agentconfigs.porter.sh
+  name: agentconfigs.ops.porter.sh
 spec:
-  group: porter.sh
+  group: ops.porter.sh
   names:
     kind: AgentConfig
     listKind: AgentConfigList
