@@ -18,7 +18,7 @@ operator
 
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
-/manifests.yaml
+config/.manifests/
 installer/manifests.yaml
 
 # editor and IDE paraphernalia

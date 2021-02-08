@@ -19,7 +19,7 @@ metadata:
     capabilities: Basic Install
     operators.operatorframework.io/builder: operator-sdk-v1.3.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
-  name: porterops.v0.0.1
+  name: porterops.v0.1.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -172,7 +172,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: localhost:5000/porterops-controller:latest
+                image: ghcr.io/getporter/porterops-controller:canary
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -237,7 +237,7 @@ spec:
   - cnab
   links:
   - name: Porterops
-    url: https://porterops.domain
+    url: https://porter.sh/operator
   maintainers:
   - email: me@carolynvanslyck.com
     name: Carolyn Van Slyck
@@ -245,4 +245,4 @@ spec:
   provider:
     name: Porter
     url: https://porter.sh
-  version: 0.0.1
+  version: 0.1.0

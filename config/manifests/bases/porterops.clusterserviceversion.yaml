@@ -43,7 +43,7 @@ spec:
   - cnab
   links:
   - name: Porterops
-    url: https://porterops.domain
+    url: https://porter.sh/operator
   maintainers:
   - email: me@carolynvanslyck.com
     name: Carolyn Van Slyck

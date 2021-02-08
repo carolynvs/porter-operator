@@ -30,6 +30,9 @@ import (
 // var Default = Build
 
 const (
+	// TODO: Use git version
+	version = "0.1.0"
+
 	// Version of KIND to install if not already present
 	kindVersion = "v0.10.0"
 
@@ -43,7 +46,7 @@ const (
 	kubeconfig = "kind.config"
 
 	// Namespace of the porter operator
-	operatorNamespace = "porter-operator-system"
+	operatorNamespace = "porterops-system"
 
 	// Container name of the local registry
 	registryContainer = "registry"
@@ -88,30 +91,70 @@ func Build() error {
 	return shx.RunV("go", "build", "-o", "bin/manager", "main.go")
 }
 
-func Bundle() error {
-	mg.SerialDeps(UseProductionEnvironment, BuildManifests)
+func Bundle() {
+	mg.Deps(BundleOlm, BundlePorter)
+}
 
-	err := shx.Copy("manifests.yaml", "installer/")
+func BundlePorter() error {
+	mg.Deps(UseProductionEnvironment, BuildManifests)
+	err := shx.Copy("config/.manifests/manifests.yaml", "installer/")
 	if err != nil {
 		return err
 	}
 
 	// TODO: set --version
-	return shx.Command("porter", "publish", "--debug").In("installer").RunV()
+	return shx.Command("porter", "build", "--debug").In("installer").RunV()
+}
+
+func BundleOlm() error {
+	mg.Deps(UseProductionEnvironment, BuildManifests)
+
+	err := kustomize("build", "config/manifests", "-o", "config/.manifests/manifests.yaml").RunV()
+	if err != nil {
+		return err
+	}
+
+	// TODO: use the git
+	manifests, err := ioutil.ReadFile("config/.manifests/manifests.yaml")
+	if err != nil {
+		return err
+	}
+	cmd := shx.Command("operator-sdk", "generate", "bundle", "-q", "--overwrite", "--version", version)
+	stdinPipe, err := cmd.Cmd.StdinPipe()
+	go func() {
+		stdinPipe.Write(manifests)
+		stdinPipe.Close()
+	}()
+	if err != nil {
+		return err
+	}
+	err = cmd.RunV()
+	if err != nil {
+		return err
+	}
+
+	err = shx.RunV("operator-sdk", "bundle", "validate", "./bundle")
+	if err != nil {
+		return err
+	}
+
+	return shx.RunV("docker", "build", "-t", Env.OlmBundleImage, "-f", "bundle.Dockerfile", ".")
 }
 
 func BuildManifests() error {
 	mg.Deps(EnsureKustomize, EnsureControllerGen)
 
 	fmt.Println("Using environment", Env.Name)
-	err := kustomize("edit", "set", "image", "controller="+Env.ControllerImage).In("config/manager").Run()
+	err := kustomize("edit", "set", "image", "controller="+Env.ControllerImage).In("config/manager").RunV()
 	if err != nil {
 		return err
 	}
 
-	if err := os.Remove("manifests.yaml"); err != nil && !os.IsNotExist(err) {
+	if err := os.RemoveAll("config/.manifests"); err != nil && !os.IsNotExist(err) {
 		return errors.Wrap(err, "could not remove generated manifests directory")
 	}
+
+	os.MkdirAll("config/.manifests", 0700)
 
 	// Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 	crdOpts := "crd:trivialVersions=true,preserveUnknownFields=false"
@@ -120,7 +163,7 @@ func BuildManifests() error {
 		return err
 	}
 
-	return kustomize("build", "config/default", "-o", "manifests.yaml").RunV()
+	return kustomize("build", "config/default", "-o", "config/.manifests/manifests.yaml").RunV()
 }
 
 // Run all tests
@@ -154,7 +197,7 @@ func Deploy() error {
 		return err
 	}
 
-	err = kubectl("apply", "-f", "manifests.yaml").Run()
+	err = kubectl("apply", "-f", "config/.manifests/manifests.yaml").Run()
 	if err != nil {
 		return err
 	}
@@ -199,6 +242,16 @@ func PublishController() error {
 	}
 
 	return shx.RunV("docker", "push", Env.ControllerImage)
+}
+
+// Publish the Porter bundle.
+func PublishPorter() error {
+	return shx.Command("porter", "publish", "--registry", Env.Registry, "--debug").In("installer").RunV()
+}
+
+// Publish the OLM bundle.
+func PublishOlm() error {
+	return shx.RunV("docker", "push", Env.OlmBundleImage)
 }
 
 // Reapply the file in config/samples, usage: mage bump porter-hello.

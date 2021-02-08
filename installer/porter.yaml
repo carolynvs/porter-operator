@@ -39,7 +39,7 @@ upgrade:
         - restart
         - deployment/porter-operator-controller-manager
       flags:
-        namespace: porter-operator-system
+        namespace: porterops-system
   - exec:
       description: "Wait for deployment"
       command: kubectl

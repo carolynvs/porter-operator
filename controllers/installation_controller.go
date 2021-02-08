@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	operatorNamespace = "porter-operator-system"
+	operatorNamespace = "porterops-system"
 )
 
 // InstallationReconciler reconciles a Installation object
