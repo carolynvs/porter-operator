@@ -198,7 +198,7 @@ func PublishController() error {
 		return err
 	}
 
-	return shx.RunV("docker", "build", "-t", Env.ControllerImage, ".")
+	return shx.RunV("docker", "push", Env.ControllerImage)
 }
 
 // Reapply the file in config/samples, usage: mage bump porter-hello.
