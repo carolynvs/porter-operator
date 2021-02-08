@@ -31,10 +31,10 @@ type InstallationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=porter.sh,resources=agentconfigs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=porter.sh,resources=installations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=porter.sh,resources=installations/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=porter.sh,resources=installations/finalizers,verbs=update
+// +kubebuilder:rbac:groups=ops.porter.sh,resources=agentconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ops.porter.sh,resources=installations,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ops.porter.sh,resources=installations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ops.porter.sh,resources=installations/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;delete

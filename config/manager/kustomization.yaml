@@ -16,6 +16,3 @@ images:
 - name: controller
   newName: localhost:5000/porterops-controller
   newTag: latest
-- name: manager
-  newName: localhost:5000/porterops-controller
-  newTag: canary

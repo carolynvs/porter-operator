@@ -1,6 +1,6 @@
 domain: porter.sh
 layout: go.kubebuilder.io/v3
-projectName: porter-operator
+projectName: porterops
 repo: get.porter.sh/operator
 resources:
 - crdVersion: v1

@@ -1,4 +1,4 @@
-apiVersion: porter.sh/v1
+apiVersion: ops.porter.sh/v1
 kind: Installation
 metadata:
   name: porter-hello
