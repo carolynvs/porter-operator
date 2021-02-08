@@ -154,6 +154,11 @@ func (c AgentConfigSpec) MergeConfig(override AgentConfigSpec) AgentConfigSpec {
 	return c
 }
 
+// AgentConfigStatus defines the observed state of AgentConfig
+type AgentConfigStatus struct {
+	// AgentConfig doesn't have a status but it is required to generate an OLM bundle
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
@@ -161,7 +166,8 @@ func (c AgentConfigSpec) MergeConfig(override AgentConfigSpec) AgentConfigSpec {
 type AgentConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              AgentConfigSpec `json:"spec,omitempty"`
+	Spec              AgentConfigSpec   `json:"spec,omitempty"`
+	Status            AgentConfigStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

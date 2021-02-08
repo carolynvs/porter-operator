@@ -104,7 +104,7 @@ func BuildManifests() error {
 	mg.Deps(EnsureKustomize, EnsureControllerGen)
 
 	fmt.Println("Using environment", Env.Name)
-	err := kustomize("edit", "set", "image", "manager="+Env.ControllerImage).In("config/manager").Run()
+	err := kustomize("edit", "set", "image", "controller="+Env.ControllerImage).In("config/manager").Run()
 	if err != nil {
 		return err
 	}

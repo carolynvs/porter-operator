@@ -1,0 +1,54 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: porterops.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: AgentConfig is the Schema for the agentconfigs API
+      displayName: Agent Config
+      kind: AgentConfig
+      name: agentconfigs.ops.porter.sh
+      version: v1
+    - description: Installation is the Schema for the installations API
+      displayName: Installation
+      kind: Installation
+      name: installations.ops.porter.sh
+      version: v1
+  description: Automate bundles with Porter
+  displayName: Porter Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - porter
+  - cnab
+  links:
+  - name: Porterops
+    url: https://porterops.domain
+  maintainers:
+  - email: me@carolynvanslyck.com
+    name: Carolyn Van Slyck
+  maturity: alpha
+  provider:
+    name: Porter
+    url: https://porter.sh
+  version: 0.0.0
