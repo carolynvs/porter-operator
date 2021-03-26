@@ -49,6 +49,9 @@ const (
 
 	// Container name of the local registry
 	registryContainer = "registry"
+
+	// Path to the porter bundle for the operator
+	operatorBundleDir = "porter/operator"
 )
 
 // Build a command that stops the build on if the command fails
@@ -98,10 +101,10 @@ func Build() {
 func BuildBundle() {
 	mg.SerialDeps(BuildManifests)
 
-	mgx.Must(shx.Copy("manifests.yaml", "installer/manifests/operator.yaml"))
+	mgx.Must(shx.Copy("manifests.yaml", "porter/operator/manifests/operator.yaml"))
 
 	meta := LoadMetadatda()
-	must.Command("porter", "build", "--version", strings.TrimPrefix(meta.Version, "v")).In("installer").RunV()
+	must.Command("porter", "build", "--version", strings.TrimPrefix(meta.Version, "v")).In(operatorBundleDir).RunV()
 }
 
 func Publish() {
@@ -111,10 +114,10 @@ func Publish() {
 // Push the porter-operator bundle to a registry. Defaults to the local test registry.
 func PublishBundle() {
 	mg.Deps(BuildBundle)
-	must.Command("porter", "publish", "--registry", Env.Registry).In("installer").RunV()
+	must.Command("porter", "publish", "--registry", Env.Registry).In(operatorBundleDir).RunV()
 
 	meta := LoadMetadatda()
-	must.Command("porter", "publish", "--registry", Env.Registry, "--tag", meta.Permalink).In("installer").RunV()
+	must.Command("porter", "publish", "--registry", Env.Registry, "--tag", meta.Permalink).In(operatorBundleDir).RunV()
 }
 
 func BuildManifests() {

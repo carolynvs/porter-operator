@@ -5,10 +5,10 @@ on:
     branches:
       - main
     paths:
-      - 'installer-olm/**'
+      - 'porter/olm/**'
   pull_request:
     paths:
-      - 'installer-olm/**'
+      - 'porter/olm/**'
 
 jobs:
   publish:
