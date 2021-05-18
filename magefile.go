@@ -123,6 +123,7 @@ func BuildManifests() {
 	fmt.Println("Using environment", Env.Name)
 	meta := LoadMetadatda()
 	img := Env.ControllerImagePrefix + meta.Version
+	fmt.Println(img)
 	kustomize("edit", "set", "image", "manager="+img).In("config/manager").Run()
 
 	if err := os.Remove("manifests.yaml"); err != nil && !os.IsNotExist(err) {

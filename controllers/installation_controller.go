@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,8 +28,9 @@ const (
 // InstallationReconciler reconciles a Installation object
 type InstallationReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=porter.sh,resources=agentconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -39,6 +41,7 @@ type InstallationReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=create;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -69,22 +72,12 @@ func (r *InstallationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if apierrors.IsNotFound(err) {
 			err = r.createJobForInstallation(ctx, jobName, inst)
 			if err != nil {
-				return ctrl.Result{}, err
+				return ctrl.Result{Requeue: true}, err
 			}
 		} else {
 			return ctrl.Result{}, errors.Wrapf(err, "could not query for the bundle installation job %s/%s", req.Namespace, porterJob.Name)
 		}
 	}
-
-	// How to prevent concurrent jobs?
-	//  1. Have porter itself wait for pending actions to complete, i.e. storage locks (added to backlog)
-	//  1. * Requeue with backoff until we can run it (May run into problematic backoff behavior)
-	//  1. Use job dependencies with either init container (problematic because of init container timeouts)
-
-	// Update Installation events with job created
-	// Can we do the status to have the deployments running? e.g. like how a deployment says 1/1 available/ready.
-	// Can we add last action and result to the bundle installation?
-	// how much do we want to replicate of porter's info in k8s? Just the k8s data?
 
 	return ctrl.Result{}, nil
 }
@@ -98,27 +91,7 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 		return err
 	}
 
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: inst.Namespace,
-			Labels: map[string]string{
-				"porter":               "true",
-				"installation":         inst.Name,
-				"installation-version": inst.ResourceVersion,
-				"job":                  jobName,
-			},
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.ResourceRequirements{
-				Requests: map[corev1.ResourceName]resource.Quantity{
-					corev1.ResourceStorage: agentCfg.GetVolumeSize(),
-				},
-			},
-		},
-	}
-	err = r.Create(ctx, pvc)
+	pvc, err := r.createPvc(ctx, jobName, inst, agentCfg)
 	if err != nil {
 		return err
 	}
@@ -280,6 +253,38 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 	return errors.Wrapf(err, "error creating job for Installation %s/%s@%s", inst.Namespace, inst.Name, inst.ResourceVersion)
 }
 
+func (r *InstallationReconciler) createPvc(ctx context.Context, jobName string, inst *porterv1.Installation, agentCfg porterv1.AgentConfigSpec) (*corev1.PersistentVolumeClaim, error) {
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: inst.Namespace,
+			Labels: map[string]string{
+				"porter":               "true",
+				"installation":         inst.Name,
+				"installation-version": inst.ResourceVersion,
+				"job":                  jobName,
+			},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceStorage: agentCfg.GetVolumeSize(),
+				},
+			},
+		},
+	}
+	err := r.Create(ctx, pvc)
+
+	if err != nil {
+		r.recorder.Event(pvc, "Warning", "Error", fmt.Sprintf("Could not create pvc for job %s/%s", inst.Namespace, jobName))
+	} else {
+		r.recorder.Event(pvc, "Normal", "Created", fmt.Sprintf("Created pvc %s/%s", pvc.Namespace, pvc.Name))
+	}
+
+	return pvc, err
+}
+
 func (r *InstallationReconciler) getPorterConfig(ctx context.Context, inst *porterv1.Installation) (porterv1.AgentConfigSpec, error) {
 	logConfig := func(name string, config porterv1.AgentConfigSpec) {
 		r.Log.Info(fmt.Sprintf("Found %s level porter agent configuration", name),
@@ -330,6 +335,6 @@ func (r *InstallationReconciler) getPorterConfig(ctx context.Context, inst *port
 func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&porterv1.Installation{}).
-		Owns(&corev1.Pod{}).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
