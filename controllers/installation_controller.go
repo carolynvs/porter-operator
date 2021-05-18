@@ -22,7 +22,12 @@ import (
 )
 
 const (
-	operatorNamespace = "porter-operator-system"
+	operatorNamespace    = "porter-operator-system"
+	EventTypeNormal      = "Normal"
+	EventTypeWarning     = "Warning"
+	EventReasonCreated   = "Created"
+	EventReasonCompleted = "Completed"
+	EventReasonError     = "Error"
 )
 
 // InstallationReconciler reconciles a Installation object
@@ -30,7 +35,7 @@ type InstallationReconciler struct {
 	client.Client
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
-	recorder record.EventRecorder
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=porter.sh,resources=agentconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -53,15 +58,20 @@ type InstallationReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *InstallationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	r.Log.Info("Reconcile triggered")
+
+	log := r.Log.WithValues("namespace", req.Namespace, "installation", req.Name)
 	// Retrieve the Installation
 	inst := &porterv1.Installation{}
 	err := r.Get(ctx, req.NamespacedName, inst)
 	if err != nil {
 		// TODO: cleanup deleted installations
-		r.Log.Info("Installation has been deleted", "installation", fmt.Sprintf("%s/%s", req.Namespace, req.Name))
+		log.Info("Installation was deleted")
 		return ctrl.Result{Requeue: false}, nil
 	}
 
+	log = log.WithValues("resourceVersion", inst.ResourceVersion)
+	log.Info("Retrieving associated job")
 	// Retrieve the Job running the porter action
 	//  - job metadata contains a reference to the bundle installation and CRD revision
 	porterJob := &batchv1.Job{}
@@ -70,35 +80,59 @@ func (r *InstallationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		// Create the Job if not found
 		if apierrors.IsNotFound(err) {
-			err = r.createJobForInstallation(ctx, jobName, inst)
+			log.Info("Creating job for installation")
+			err = r.runPorter(ctx, log, jobName, inst)
 			if err != nil {
-				return ctrl.Result{Requeue: true}, err
+				return ctrl.Result{Requeue: true}, r.logError(log, inst, err, "Could not create job")
 			}
 		} else {
-			return ctrl.Result{}, errors.Wrapf(err, "could not query for the bundle installation job %s/%s", req.Namespace, porterJob.Name)
+			return ctrl.Result{}, r.logError(log, inst, err, fmt.Sprintf("Could not retrieve job %s/%s", req.Namespace, porterJob.Name))
 		}
+	}
+
+	// Wait for the job to complete
+	if porterJob.Status.CompletionTime == nil {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Note the success of the installation
+	if porterJob.Status.Succeeded == 0 {
+		r.Recorder.Eventf(inst, EventTypeWarning, EventReasonError, "Job %s/%s failed", inst.Namespace, jobName)
+	} else {
+		r.Recorder.Eventf(inst, EventTypeNormal, EventReasonCompleted, "Job %s/%s completed", inst.Namespace, jobName)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, jobName string, inst *porterv1.Installation) error {
-	r.Log.Info(fmt.Sprintf("creating porter job %s/%s for Installation %s/%s", inst.Namespace, jobName, inst.Namespace, inst.Name))
+func (r *InstallationReconciler) logError(log logr.Logger, obj runtime.Object, err error, msg string, args ...interface{}) error {
+	msg = fmt.Sprintf(msg, args...)
+	log.Error(err, msg)
+	err = errors.Wrapf(err, msg)
+	r.Recorder.Eventf(obj, EventTypeWarning, EventReasonError, err.Error())
+	return err
+}
+
+func (r *InstallationReconciler) runPorter(ctx context.Context, log logr.Logger, jobName string, inst *porterv1.Installation) error {
+	log.Info(fmt.Sprintf("Creating porter job %s/%s", inst.Namespace, jobName))
 
 	// Create a volume to share data between porter and the invocation image
-	agentCfg, err := r.getPorterConfig(ctx, inst)
+	agentCfg, err := r.getPorterConfig(ctx, log, inst)
 	if err != nil {
 		return err
 	}
 
-	pvc, err := r.createPvc(ctx, jobName, inst, agentCfg)
-	if err != nil {
-		return err
-	}
-
-	log := r.Log.WithValues("installation", inst.Name, "namespace", inst.Namespace, "resourceVersion", inst.ResourceVersion)
 	log.Info("Using " + agentCfg.GetPorterImage())
+	porterJob, err := r.createJob(ctx, inst, jobName, agentCfg)
+	if err != nil {
+		return err
+	}
 
+	_, err = r.createPvc(ctx, porterJob, agentCfg)
+	return err
+}
+
+func (r *InstallationReconciler) createJob(ctx context.Context, inst *porterv1.Installation, jobName string, agentCfg porterv1.AgentConfigSpec) (*batchv1.Job, error) {
 	// porter ACTION INSTALLATION_NAME --tag=REFERENCE --debug
 	// TODO: For now require the action, and when porter supports installorupgrade switch
 	var args []string
@@ -125,7 +159,7 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 		args = append(args, fmt.Sprintf("--param=%s=%s", k, v))
 	}
 
-	porterJob := &batchv1.Job{
+	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
 			Namespace: inst.Namespace,
@@ -163,7 +197,7 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 							Name: "porter-shared",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvc.Name,
+									ClaimName: jobName,
 								},
 							},
 						},
@@ -199,7 +233,7 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 								},
 								{
 									Name:  "JOB_VOLUME_NAME",
-									Value: pvc.Name,
+									Value: jobName,
 								},
 								{
 									Name:  "JOB_VOLUME_PATH",
@@ -249,21 +283,28 @@ func (r *InstallationReconciler) createJobForInstallation(ctx context.Context, j
 		},
 	}
 
-	err = r.Create(ctx, porterJob, &client.CreateOptions{})
-	return errors.Wrapf(err, "error creating job for Installation %s/%s@%s", inst.Namespace, inst.Name, inst.ResourceVersion)
+	err := r.Create(ctx, job, &client.CreateOptions{})
+	if err != nil {
+		r.Recorder.Eventf(inst, EventTypeWarning, "Error", "Could not create job: %v", err.Error())
+		return nil, errors.Wrapf(err, "error creating job for Installation %s/%s@%s", inst.Namespace, inst.Name, inst.ResourceVersion)
+	}
+
+	r.Recorder.Eventf(inst, EventTypeNormal, EventReasonCreated, "Created job %s/%s", job.Namespace, job.Name)
+	return job, nil
 }
 
-func (r *InstallationReconciler) createPvc(ctx context.Context, jobName string, inst *porterv1.Installation, agentCfg porterv1.AgentConfigSpec) (*corev1.PersistentVolumeClaim, error) {
+func (r *InstallationReconciler) createPvc(ctx context.Context, job *batchv1.Job, agentCfg porterv1.AgentConfigSpec) (*corev1.PersistentVolumeClaim, error) {
+	labels := make(map[string]string, len(job.Labels)+1)
+	for k, v := range job.Labels {
+		labels[k] = v
+	}
+	labels["job"] = job.Name
+
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: inst.Namespace,
-			Labels: map[string]string{
-				"porter":               "true",
-				"installation":         inst.Name,
-				"installation-version": inst.ResourceVersion,
-				"job":                  jobName,
-			},
+			Name:      job.Name,
+			Namespace: job.Namespace,
+			Labels:    labels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -275,19 +316,18 @@ func (r *InstallationReconciler) createPvc(ctx context.Context, jobName string, 
 		},
 	}
 	err := r.Create(ctx, pvc)
-
 	if err != nil {
-		r.recorder.Event(pvc, "Warning", "Error", fmt.Sprintf("Could not create pvc for job %s/%s", inst.Namespace, jobName))
-	} else {
-		r.recorder.Event(pvc, "Normal", "Created", fmt.Sprintf("Created pvc %s/%s", pvc.Namespace, pvc.Name))
+		r.Recorder.Eventf(job, EventTypeWarning, EventReasonError, "Could not create pvc: %v", err.Error())
+		return nil, err
 	}
 
+	r.Recorder.Eventf(job, EventTypeNormal, EventReasonCreated, "Created pvc %s/%s", pvc.Namespace, pvc.Name)
 	return pvc, err
 }
 
-func (r *InstallationReconciler) getPorterConfig(ctx context.Context, inst *porterv1.Installation) (porterv1.AgentConfigSpec, error) {
+func (r *InstallationReconciler) getPorterConfig(ctx context.Context, log logr.Logger, inst *porterv1.Installation) (porterv1.AgentConfigSpec, error) {
 	logConfig := func(name string, config porterv1.AgentConfigSpec) {
-		r.Log.Info(fmt.Sprintf("Found %s level porter agent configuration", name),
+		log.Info(fmt.Sprintf("Found %s level porter agent configuration", name),
 			"porterRepository", config.PorterRepository,
 			"porterVersion", config.PorterVersion,
 			"pullPolicy", config.PullPolicy,
@@ -320,7 +360,7 @@ func (r *InstallationReconciler) getPorterConfig(ctx context.Context, inst *port
 		MergeConfig(nsCfg.Spec).
 		MergeConfig(inst.Spec.AgentConfig)
 
-	r.Log.Info("resolved porter agent configuration",
+	log.Info("resolved porter agent configuration",
 		"porterImage", cfg.GetPorterImage(),
 		"pullPolicy", cfg.GetPullPolicy(),
 		"serviceAccount", cfg.ServiceAccount,
